@@ -8,3 +8,4 @@ dist
 .env
 npm-debug.log
 .dockerignore
+/artifacts/migrations/

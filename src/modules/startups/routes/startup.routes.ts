@@ -4,11 +4,14 @@ import { ensureRole } from "@shared/middlewares/ensureRole";
 import { TipoPerfil } from "@shared/enums";
 import { handleControllerError } from "@shared/http/handleControllerError";
 import { Router } from "express";
+import { matchmakingRoutes } from "@modules/matchmaking/matchmaking.routes";
 import { StartupController } from "@modules/startups/controllers/StartupController";
 import { ensureAuthenticated } from "@shared/middlewares/ensureAuthenticated";
 
 const startupRoutes = Router();
 const startupController = new StartupController();
+
+startupRoutes.use(matchmakingRoutes());
 
 startupRoutes.post("/", startupController.create);
 startupRoutes.get("/", ensureAuthenticated, startupController.listar);

@@ -16,9 +16,8 @@ export const AppDataSource = new DataSource({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
 
-  // O esquema existente é atualizado pelas migrations; sincronizar pode remover
-  // colunas legadas e enums compartilhados. Habilite apenas em banco descartável.
-  synchronize: process.env.NODE_ENV !== 'production' && process.env.DB_SYNCHRONIZE === 'true',
+  // Alterações de schema exclusivamente por migrations explicitamente autorizadas.
+  synchronize: false,
   logging: process.env.NODE_ENV !== 'production',
 
   entities: [entitiesGlob],
