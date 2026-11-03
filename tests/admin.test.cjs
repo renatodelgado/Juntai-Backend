@@ -49,6 +49,8 @@ test(
             email: ids[n] + "@admin-test.invalid",
             senhaHash: "not-a-valid-password-hash",
             tipoPerfil: n === 0 ? "admin" : n === 1 ? "startup" : "investidor",
+            avatarUrl:
+              n === 2 ? "https://example.com/investor-fixture.png" : undefined,
             ativo: true,
           }),
         );
@@ -199,6 +201,14 @@ test(
       assert.equal(inbox.data.length, 1);
       assert.equal(inbox.data[0].usuarioId, ids[2]);
       assert.equal(inbox.data[0].naoLidas, 1);
+      assert.equal(
+        inbox.data[0].avatarUrl,
+        "https://example.com/investor-fixture.png",
+      );
+      assert.equal(inbox.data[0].logoUrl, null);
+      const investorInbox = await api("/mensagens/conversas", 2, "investidor");
+      assert.equal(investorInbox.data[0].logoUrl, sample.logoUrl ?? null);
+      assert.equal(investorInbox.data[0].avatarUrl, null);
       assert.equal(
         (await api("/mensagens/" + ids[2], 1, "startup")).data.length,
         1,
@@ -362,7 +372,10 @@ test(
         await db.query("DELETE FROM log_auditoria WHERE admin_usuario_id=$1", [
           ids[0],
         ]);
-        await db.query("DELETE FROM mensagens WHERE remetente_usuario_id = ANY($1::uuid[])", [ids]);
+        await db.query(
+          "DELETE FROM mensagens WHERE remetente_usuario_id = ANY($1::uuid[])",
+          [ids],
+        );
         for (const id of ids) await db.getRepository(Usuario).delete(id);
         await db.destroy();
       }

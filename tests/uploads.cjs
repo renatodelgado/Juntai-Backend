@@ -4,11 +4,11 @@ const ts = require(path.join(root, 'node_modules/typescript'));
 const express = require(path.join(root, 'node_modules/express'));
 const jwt = require(path.join(root, 'node_modules/jsonwebtoken'));
 const updates = [], destroyed = [];
-let owner = true, failSave = false;
+let owner = true, failSave = false, providerError = null;
 const repo = { findOne: async options => { assert.deepEqual(options.select, { id: true }); return owner ? { id: 'startup-test' } : null; },
   update: async (id, data) => { if (failSave) throw new Error('DB error'); updates.push({ id, data }); } };
 const cloud = { config() {}, uploader: {
-  upload_stream: (options, callback) => ({ end: () => callback(null, { public_id: options.public_id, secure_url: 'https://res.cloudinary.com/test/' + options.public_id }) }),
+  upload_stream: (options, callback) => ({ end: () => providerError ? callback(providerError) : callback(null, { public_id: options.public_id, secure_url: 'https://res.cloudinary.com/test/' + options.public_id }) }),
   destroy: async id => destroyed.push(id),
 } };
 function load(relative) {
@@ -51,8 +51,19 @@ const app = express(); app.use('/uploads', load('modules/uploads/routes/upload.r
     assert.equal((await fetch(base+'apresentacao', { method: 'POST', headers: pdfHeaders, body: '%PDF-1.4' })).status, 201);
     assert.ok(updates[1].data.apresentacaoUrl.endsWith('.pdf'));
     assert.equal((await fetch(base+'apresentacao', { method: 'POST', headers: pdfHeaders, body: 'fake' })).status, 415);
+    providerError = { http_code: 499, name: 'TimeoutError' };
+    const temporary = await fetch(base+'apresentacao', { method: 'POST', headers: pdfHeaders, body: '%PDF-1.4' });
+    assert.equal(temporary.status, 502);
+    assert.equal((await temporary.json()).retryable, true);
+    providerError = { http_code: 401 };
+    const permanent = await fetch(base+'apresentacao', { method: 'POST', headers: pdfHeaders, body: '%PDF-1.4' });
+    assert.equal(permanent.status, 502);
+    assert.equal((await permanent.json()).retryable, false);
+    providerError = null;
     failSave = true;
-    assert.equal((await fetch(base+'logo', { method: 'POST', headers, body: png })).status, 502);
+    const databaseFailure = await fetch(base+'logo', { method: 'POST', headers, body: png });
+    assert.equal(databaseFailure.status, 500);
+    assert.equal((await databaseFailure.json()).code, 'UPLOAD_DATABASE_FAILED');
     assert.equal(destroyed.length, 1);
     console.log('Backend: autenticacao, papel, propriedade, formatos, limite, URLs e limpeza verificados.');
   } finally { await new Promise(resolve => server.close(resolve)); }

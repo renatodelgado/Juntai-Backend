@@ -39,10 +39,12 @@ uploadRoutes.post('/startup/:kind', ensureAuthenticated, ensureRole(TipoPerfil.S
   if (!process.env.CLOUDINARY_URL) return res.status(503).json({ message: 'Upload service is not configured.' });
   cloudinary.config({ secure: true });
   let uploaded: { public_id: string; resource_type: 'image' | 'raw' } | undefined;
+  let stage: 'database' | 'provider' = 'database';
   try {
     const repo = AppDataSource.getRepository(Startup);
     const startup = await repo.findOne({ select: { id: true }, where: { usuario: { id: req.user!.id, ativo: true } } });
     if (!startup) return res.status(403).json({ message: 'Startup not found or inactive.' });
+    stage = 'provider';
     const url = await new Promise<string>((resolve, reject) => {
       cloudinary.uploader.upload_stream({
         resource_type: kind === 'logo' ? 'image' : 'raw',
@@ -53,11 +55,17 @@ uploadRoutes.post('/startup/:kind', ensureAuthenticated, ensureRole(TipoPerfil.S
         else { uploaded = { public_id: result.public_id, resource_type: kind === 'logo' ? 'image' : 'raw' }; resolve(result.secure_url); }
       }).end(file);
     });
+    stage = 'database';
     await repo.update(startup.id, kind === 'logo' ? { logoUrl: url } : { apresentacaoUrl: url });
     return res.status(201).json({ url });
-  } catch {
+  } catch (error) {
+    const failure = error as { code?: string; http_code?: number; name?: string };
+    console.error('Startup upload failed', { stage, code: failure?.code, httpCode: failure?.http_code, name: failure?.name });
     if (uploaded) await cloudinary.uploader.destroy(uploaded.public_id, { resource_type: uploaded.resource_type }).catch(() => {});
-    return res.status(502).json({ message: 'Cloudinary upload failed. Please try again.' });
+    if (stage === 'database')
+      return res.status(500).json({ code: 'UPLOAD_DATABASE_FAILED', retryable: false, message: 'Não foi possível salvar a apresentação ou o logo no banco.' });
+    const retryable = ![400, 401, 403].includes(failure?.http_code ?? 0);
+    return res.status(502).json({ code: 'UPLOAD_PROVIDER_FAILED', retryable, message: retryable ? 'O serviço de upload falhou temporariamente. Tente novamente.' : 'O serviço de upload recusou o envio. Confira a configuração do backend.' });
   }
 });
 const uploadError: ErrorRequestHandler = (error, _req, res, _next) => {

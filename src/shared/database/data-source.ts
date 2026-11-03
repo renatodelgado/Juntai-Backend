@@ -16,9 +16,9 @@ export const AppDataSource = new DataSource({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
 
-  // NUNCA true em produção: deixa o TypeORM alterar o schema sozinho.
-  // Enquanto ainda não tem migrations, pode deixar true só em desenvolvimento.
-  synchronize: process.env.NODE_ENV !== 'production',
+  // O esquema existente é atualizado pelas migrations; sincronizar pode remover
+  // colunas legadas e enums compartilhados. Habilite apenas em banco descartável.
+  synchronize: process.env.NODE_ENV !== 'production' && process.env.DB_SYNCHRONIZE === 'true',
   logging: process.env.NODE_ENV !== 'production',
 
   entities: [entitiesGlob],

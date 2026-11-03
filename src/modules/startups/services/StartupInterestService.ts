@@ -1,4 +1,4 @@
-﻿import { AppDataSource } from "@shared/database/data-source";
+import { AppDataSource } from "@shared/database/data-source";
 import { EntityManager } from "typeorm";
 import { AppError } from "@shared/errors/AppError";
 import { isUuid } from "@shared/validation/isUuid";
@@ -25,10 +25,10 @@ export class StartupInterestService {
   async list(userId: string) {
     const investorId = await this.actor(AppDataSource.manager, userId);
     return AppDataSource.query(
-      `SELECT s.id AS "startupId", s.nome_fantasia AS "startupName", u.id AS "usuarioId", MIN(e.ocorrido_em) AS "createdAt"
+      `SELECT s.id AS "startupId", s.nome_fantasia AS "startupName", s.logo_url AS "logoUrl", u.id AS "usuarioId", MIN(e.ocorrido_em) AS "createdAt"
       FROM funil_interacoes e JOIN startups s ON s.id=e.startup_id JOIN usuarios u ON u.id=s.usuario_id
       WHERE e.investidor_id=$1 AND e.tipo_evento='interesse_demonstrado' AND s.status_moderacao='aprovado' AND u.ativo=true
-      GROUP BY s.id,s.nome_fantasia,u.id ORDER BY MIN(e.ocorrido_em) DESC`,
+      GROUP BY s.id,s.nome_fantasia,s.logo_url,u.id ORDER BY MIN(e.ocorrido_em) DESC`,
       [investorId],
     );
   }
@@ -37,7 +37,7 @@ export class StartupInterestService {
     return AppDataSource.transaction(async (manager) => {
       const investorId = await this.actor(manager, userId, true);
       const [startup] = await manager.query(
-        "SELECT s.id,s.nome_fantasia AS nome,s.status_moderacao AS status,u.id AS usuario_id,u.ativo FROM startups s JOIN usuarios u ON u.id=s.usuario_id WHERE s.id=$1 FOR SHARE OF s,u",
+        "SELECT s.id,s.logo_url,s.nome_fantasia AS nome,s.status_moderacao AS status,u.id AS usuario_id,u.ativo FROM startups s JOIN usuarios u ON u.id=s.usuario_id WHERE s.id=$1 FOR SHARE OF s,u",
         [startupId],
       );
       if (!startup?.ativo || startup.status !== "aprovado")
@@ -54,6 +54,7 @@ export class StartupInterestService {
       return {
         startupId,
         startupName: startup.nome,
+        logoUrl: startup.logo_url,
         usuarioId: startup.usuario_id,
         createdAt: event.ocorrido_em,
       };
