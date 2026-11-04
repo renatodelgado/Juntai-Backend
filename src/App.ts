@@ -20,11 +20,16 @@ class App {
   }
 
   private middlewares(): void {
-    this.express.use(cors());
+    this.express.use(cors({
+      origin: process.env.CORS_ORIGINS
+        ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+        : true,
+    }));
     this.express.use(express.json());
   }
 
   private routes(): void {
+    this.express.get("/health", (_req, res) => { res.json({ status: "ok" }); });
     this.express.get("/", (req, res) => {
       res.send("Juntai-Backend está no ar 🚀");
     });

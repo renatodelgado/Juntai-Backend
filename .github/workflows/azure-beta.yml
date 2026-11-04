@@ -1,0 +1,40 @@
+name: Deploy api beta
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: azure-beta-api
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci && npm test && npm run build
+        env:
+          ADMIN_DB_TEST: '0'
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and publish image
+        env:
+          REGISTRY: ${{ vars.AZURE_REGISTRY }}
+        run: |
+          az acr login --name "${REGISTRY%%.*}"
+          docker build -t "$REGISTRY/api:$GITHUB_SHA" .
+          docker push "$REGISTRY/api:$GITHUB_SHA"
+      - name: Deploy revision
+        env:
+          REGISTRY: ${{ vars.AZURE_REGISTRY }}
+        run: |
+          az containerapp update --name juntai-beta-api --resource-group juntai-beta --image "$REGISTRY/api:$GITHUB_SHA" --output none
