@@ -33,7 +33,7 @@ export class MatchmakingClient {
     const timer = setTimeout(() => controller.abort(), timeout);
     try {
       const response = await this.transport(new URL(endpoint, base), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(process.env.MATCHMAKING_API_KEY ? { 'X-Matchmaking-Key': process.env.MATCHMAKING_API_KEY } : {}) },
         body: JSON.stringify(payload), signal: controller.signal, redirect: 'error',
       });
       if (!response.ok) throw new AppError('Serviço de recomendação indisponível.', response.status >= 500 || (endpoint === '/match/supervised' && response.status === 404) ? 503 : 502);
