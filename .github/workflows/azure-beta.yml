@@ -21,6 +21,7 @@ jobs:
       - run: npm ci && npm test && npm run build
         env:
           ADMIN_DB_TEST: '0'
+          JWT_SECRET: ci-tests-only-not-a-deployment-secret
       - uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -38,3 +39,4 @@ jobs:
           REGISTRY: ${{ vars.AZURE_REGISTRY }}
         run: |
           az containerapp update --name juntai-beta-api --resource-group juntai-beta --image "$REGISTRY/api:$GITHUB_SHA" --output none
+
