@@ -9,6 +9,11 @@ import { integer, MatchmakingService } from './MatchmakingService';
 export function matchmakingRoutes(service = new MatchmakingService()) {
   const router = Router();
   const auth = [ensureAuthenticated, ensureRole(TipoPerfil.INVESTIDOR)];
+  router.get('/destaques', ...auth, async (req, res) => {
+    try {
+      res.set('Cache-Control', 'no-store').json(await service.highlights(req.user!.id));
+    } catch (error) { handleControllerError(res, error); }
+  });
   router.get('/recomendacoes', ...auth, async (req, res) => {
     try {
       if (Object.keys(req.query).some(k => k !== 'limite')) throw new AppError('Parâmetro inválido.', 400);

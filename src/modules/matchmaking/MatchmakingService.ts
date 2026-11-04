@@ -1,3 +1,4 @@
+import { selectHighlights } from './highlights';
 import { AppDataSource } from '@shared/database/data-source';
 import { Investidor } from '@modules/investidores/entities/Investidor';
 import { Startup } from '@modules/startups/entities/Startup';
@@ -83,6 +84,21 @@ export class MatchmakingService {
     recommendations.sort((a, b) => Number(a.scoreRanking === null) - Number(b.scoreRanking === null) || (b.scoreRanking ?? 0) - (a.scoreRanking ?? 0) || b.cobertura - a.cobertura || (a.startupId < b.startupId ? -1 : a.startupId > b.startupId ? 1 : 0));
     const byId = new Map(startups.map(s => [s.id, s]));
     return { investidorId: investor.id, versaoAlgoritmo: version, origemRecomendacao: 'rules', recomendacoes: recommendations.slice(0, limit).map((r, index): Profile => ({ ...r, posicao: index + 1, posicaoRanking: index + 1, origemRecomendacao: 'rules', contextoExposicao: this.context(investor, byId.get(r.startupId)!, 'rules', index + 1, version) })) };
+  }
+  async highlights(userId: string) {
+    const ranked = await this.recommend(userId, 1000);
+    const chosen = selectHighlights(ranked.recomendacoes);
+    if (!chosen.length) return { items: [] };
+    const startups = await this.db.getRepository(Startup).createQueryBuilder('s')
+      .where('s.id IN (:...ids)', { ids: chosen.map(item => item.startupId) }).getMany();
+    const byId = new Map(startups.map(item => [item.id, item]));
+    return { items: chosen.filter(item => byId.has(item.startupId)).map(item => {
+      const { usuario, ...profile } = byId.get(item.startupId)!;
+      return { ...profile, compatibility: item.origemRecomendacao === 'rules' ? item.score * 100 : undefined,
+        probabilidadeInteresse: item.probabilidadeInteresse, origemRecomendacao: item.origemRecomendacao,
+        posicaoRanking: item.posicaoRanking, contextoExposicao: item.contextoExposicao,
+        versaoModelo: item.versaoModelo, avisos: item.avisos };
+    }) };
   }
   async discovery(userId: string, params: Record<string, string>) {
     const investor = await this.actor(userId);
