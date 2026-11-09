@@ -100,6 +100,12 @@ adminRoutes.get(
     (SELECT count(*)::int FROM startups) AS startups,
     (SELECT count(*)::int FROM investidores) AS investidores,
     (SELECT count(*)::int FROM investidores WHERE tipo_investidor IN ('mentor','anjo_mentor')) AS mentores,
+    (SELECT count(*)::int FROM (
+      SELECT DISTINCT investidor_id, startup_id FROM funil_interacoes
+      WHERE tipo_evento='interesse_demonstrado'
+    ) pares) AS matches,
+    (SELECT count(*)::int FROM conversas c
+      WHERE EXISTS (SELECT 1 FROM mensagens m WHERE m.conversa_id=c.id)) AS conversas,
     (SELECT count(*)::int FROM reunioes) AS reunioes,
     (SELECT count(*)::int FROM startups WHERE status_moderacao='pendente') +
     (SELECT count(*)::int FROM investidores WHERE status_moderacao='pendente') AS pendentes`);

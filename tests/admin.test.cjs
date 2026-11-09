@@ -240,6 +240,27 @@ test(
       const metric = await request("metricas");
       assert.equal(metric.status, 200);
       assert.equal(typeof metric.data.usuarios, "number");
+      const [expectedMetrics] = await db.query(`SELECT
+        (SELECT count(*)::int FROM (SELECT DISTINCT investidor_id,startup_id
+          FROM funil_interacoes WHERE tipo_evento='interesse_demonstrado') pairs) AS matches,
+        (SELECT count(*)::int FROM conversas c WHERE EXISTS
+          (SELECT 1 FROM mensagens m WHERE m.conversa_id=c.id)) AS conversas,
+        (SELECT count(*)::int FROM reunioes) AS reunioes`);
+      for (const key of ['matches', 'conversas', 'reunioes']) {
+        assert.equal(typeof metric.data[key], 'number');
+        assert.equal(metric.data[key], expectedMetrics[key]);
+        assert.ok(metric.data[key] >= 1);
+      }
+      // Repeated interest events must not count the same pair twice.
+      await db.query(`INSERT INTO funil_interacoes (startup_id,investidor_id,tipo_evento)
+        VALUES ($1,$2,'interesse_demonstrado')`, [fixtureId, investor.id]);
+      const duplicateMetric = await request('metricas');
+      assert.equal(duplicateMetric.data.matches, metric.data.matches);
+      // Final states remain part of the total of meetings created.
+      await db.getRepository(Reuniao).update(meeting.id, { status: 'cancelada' });
+      assert.equal((await request('metricas')).data.reunioes, metric.data.reunioes);
+      await db.getRepository(Reuniao).update(meeting.id, { status: 'agendada' });
+
       const list = await request("cadastros?q=Fixture");
       assert.equal(list.status, 200);
       assert.ok(list.data.items.some((row) => row.id === fixtureId));
