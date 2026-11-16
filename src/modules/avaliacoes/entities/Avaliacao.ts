@@ -40,6 +40,12 @@ export class Avaliacao {
   @Column({ type: 'text', nullable: true })
   comentario?: string;
 
+  @Column({ name: 'resultado_interacao', type: 'text', default: 'em_analise' })
+  resultadoInteracao!: 'em_analise' | 'avancar' | 'nao_seguir';
+
+  @Column({ name: 'perspectiva_investimento', type: 'text', default: 'nao_definido' })
+  perspectivaInvestimento!: 'nao_definido' | 'em_negociacao' | 'intencao' | 'realizado' | 'nao_se_aplica';
+
   @CreateDateColumn({ name: 'criado_em', type: 'timestamptz' })
   criadoEm!: Date;
 }

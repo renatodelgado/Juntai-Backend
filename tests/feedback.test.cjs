@@ -2,7 +2,7 @@ require('ts-node/register/transpile-only');
 require('tsconfig-paths/register');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {validarNota,validarContexto,AvaliacaoService} = require('../src/modules/avaliacoes/services/AvaliacaoService');
+const {validarNota,validarContexto,validarMetricas,AvaliacaoService} = require('../src/modules/avaliacoes/services/AvaliacaoService');
 const {AppDataSource:db} = require('../src/shared/database/data-source');
 const {ReuniaoService} = require('../src/modules/reunioes/services/ReuniaoService');
 const {ReuniaoRepository} = require('../src/modules/reunioes/repositories/ReuniaoRepository');
@@ -48,4 +48,14 @@ test('atualização manual não sobrescreve um estado final concorrente',async t
  const builder={update(){return this;},set(){return this;},where(){return this;},async execute(){return {affected:0};}};
  t.mock.method(db,'getRepository',()=>({createQueryBuilder:()=>builder}));
  await assert.rejects(repository.atualizarStatus('1','cancelada'),e=>e.statusCode===409);
+});
+
+test('metricas compactas validam opcoes e mantem compatibilidade com clientes anteriores', () => {
+ assert.deepEqual(validarMetricas({}),{resultado:null,perspectiva:null});
+ for(const resultadoInteracao of ['em_analise','avancar','nao_seguir']) assert.equal(validarMetricas({resultadoInteracao}).resultado,resultadoInteracao);
+ for(const perspectivaInvestimento of ['nao_definido','em_negociacao','intencao','realizado','nao_se_aplica']) assert.equal(validarMetricas({perspectivaInvestimento}).perspectiva,perspectivaInvestimento);
+ for(const value of [null,1,{},'confirmado','']) {
+  assert.throws(()=>validarMetricas({resultadoInteracao:value}));
+  assert.throws(()=>validarMetricas({perspectivaInvestimento:value}));
+ }
 });
