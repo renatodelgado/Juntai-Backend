@@ -8,11 +8,14 @@ const {StartupReceivedInterestsService:Service}=require('../src/modules/startups
  await c.connect();const query=async(...args)=>(await c.query(...args)).rows;
  try{
  await query('BEGIN');const schema='interested_test_'+randomUUID().replaceAll('-','');await query(`CREATE SCHEMA ${schema}`);await query(`SET LOCAL search_path TO ${schema}`);
- await query(`CREATE TABLE usuarios(id uuid PRIMARY KEY,tipo_perfil text,ativo boolean DEFAULT true,avatar_url text,email text,senha_hash text);
+ await query(`CREATE TYPE interested_help AS ENUM ('networking');
+ CREATE TYPE interested_segment AS ENUM ('fintech');
+ CREATE TYPE interested_stage AS ENUM ('mvp');
+ CREATE TABLE usuarios(id uuid PRIMARY KEY,tipo_perfil text,ativo boolean DEFAULT true,avatar_url text,email text,senha_hash text);
  CREATE TABLE startups(id uuid PRIMARY KEY,usuario_id uuid,status_moderacao text);
  CREATE TABLE investidores(id uuid PRIMARY KEY,usuario_id uuid,nome text,tipo_investidor text,status_moderacao text,
  titulo_profissional text,bio text,cidade text,estado text,linkedin_url text,descricao_experiencia text,anos_experiencia int,
- areas_ajuda text[] DEFAULT '{}',segmentos_interesse text[] DEFAULT '{}',estagios_interesse text[] DEFAULT '{}');
+ areas_ajuda interested_help[] DEFAULT '{}',segmentos_interesse interested_segment[] DEFAULT '{}',estagios_interesse interested_stage[] DEFAULT '{}');
  CREATE TABLE funil_interacoes(startup_id uuid,investidor_id uuid,tipo_evento text,ocorrido_em timestamptz DEFAULT now());
  CREATE TABLE conversas(id uuid PRIMARY KEY,startup_id uuid,investidor_id uuid);
  CREATE TABLE mensagens(conversa_id uuid,remetente_usuario_id uuid);
@@ -25,6 +28,8 @@ const {StartupReceivedInterestsService:Service}=require('../src/modules/startups
  await query("INSERT INTO usuarios(id,tipo_perfil,email,senha_hash) VALUES($1,'investidor','private@example.com','NEVER_RETURN')",[users[j]]);
  await query("INSERT INTO investidores(id,usuario_id,nome,tipo_investidor,status_moderacao) VALUES($1,$2,$3,$4,$5)",[investors[j],users[j],'Pessoa '+j,j===0?'mentor':'anjo',j===3?'pendente':'aprovado']);
  }
+ await query("UPDATE investidores SET areas_ajuda='{networking}',segmentos_interesse='{fintech}',estagios_interesse='{mvp}'");
+ await query('UPDATE investidores SET areas_ajuda=NULL,segmentos_interesse=NULL,estagios_interesse=NULL WHERE id=$1',[investors[0]]);
  await query("UPDATE usuarios SET ativo=false WHERE id=$1",[users[4]]);
  for(const j of [0,0,1,2,3,4])await query("INSERT INTO funil_interacoes(startup_id,investidor_id,tipo_evento) VALUES($1,$2,$3)",[s,investors[j],j===2?'visualizacao':'interesse_demonstrado']);
  await query("INSERT INTO funil_interacoes(startup_id,investidor_id,tipo_evento) VALUES($1,$2,'interesse_demonstrado')",[s2,investors[2]]);
@@ -33,6 +38,9 @@ const {StartupReceivedInterestsService:Service}=require('../src/modules/startups
  await query("INSERT INTO reunioes(startup_id,investidor_id,status,data_hora_agendada) VALUES($1,$2,'agendada',now()+interval '1 day'),($1,$2,'agendada',now()+interval '2 days'),($1,$2,'realizada',now()-interval '1 day'),($3,$2,'agendada',now()+interval '1 hour')",[s,investors[1],s2]);
  const service=new Service();let result=await service.list(su);
  assert.deepEqual(result.resumo,{interessados:2,conversasIniciadas:1,reunioesAgendadas:2});
+ const mentor=result.items.find(item=>item.investidorId===investors[0]);const investor=result.items.find(item=>item.investidorId===investors[1]);
+ assert.deepEqual(mentor.areasAjuda,[]);assert.deepEqual(mentor.segmentosInteresse,[]);assert.deepEqual(mentor.estagiosInteresse,[]);
+ assert.deepEqual(investor.areasAjuda,['networking']);assert.deepEqual(investor.segmentosInteresse,['fintech']);assert.deepEqual(investor.estagiosInteresse,['mvp']);
  assert.equal(result.items.length,2);assert.equal(result.items.find(i=>i.investidorId===investors[0]).situacao,'novo_interesse');
  const active=result.items.find(i=>i.investidorId===investors[1]);assert.equal(active.situacao,'reuniao_agendada');assert.equal(active.podeAvaliarConversa,true);assert.equal(active.conversaId,conversation);assert.ok(active.reuniaoRealizadaId);assert.equal(active.reunioesAgendadas,2);
  const serialized=JSON.stringify(result);assert.ok(!serialized.includes('NEVER_RETURN'));assert.ok(!serialized.includes('private@example.com'));assert.ok(!serialized.includes('senha_hash'));
