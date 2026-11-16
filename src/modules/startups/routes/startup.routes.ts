@@ -1,3 +1,4 @@
+import { StartupReceivedInterestsService } from '@modules/startups/services/StartupReceivedInterestsService';
 import { discoveryRoutes } from './discovery.routes';
 import { StartupInterestService } from "@modules/startups/services/StartupInterestService";
 import { ensureRole } from "@shared/middlewares/ensureRole";
@@ -29,6 +30,11 @@ startupRoutes.get(
     }
   },
 );
+const receivedInterests = new StartupReceivedInterestsService();
+startupRoutes.get('/interessados', ensureAuthenticated, ensureRole(TipoPerfil.STARTUP), async (req,res) => {
+  try { return res.json(await receivedInterests.list(req.user!.id)); }
+  catch(error) { return handleControllerError(res,error); }
+});
 startupRoutes.post(
   "/:id/interesse",
   ensureAuthenticated,
