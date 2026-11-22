@@ -60,7 +60,7 @@ export class AuthService {
     }
 
     const token = jwt.sign(
-      { tipoPerfil: usuario.tipoPerfil },
+      { tipoPerfil: usuario.tipoPerfil, sessionVersion: usuario.sessionVersion },
       authConfig.secret,
       {
         subject: usuario.id,

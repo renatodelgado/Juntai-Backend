@@ -1,12 +1,12 @@
 import { Usuario } from '@modules/usuarios/entities/Usuario';
 
-export type UsuarioPublico = Omit<Usuario, 'senhaHash'>;
+export type UsuarioPublico = Omit<Usuario, 'senhaHash' | 'sessionVersion'>;
 
 /**
  * Devolve o usuário sem o hash da senha. Use em toda resposta HTTP que inclua um Usuario.
  */
 export function toUsuarioPublico(usuario: Usuario): UsuarioPublico {
-  const { senhaHash: _senhaHash, ...publico } = usuario;
+  const { senhaHash: _senhaHash, sessionVersion: _sessionVersion, ...publico } = usuario;
   return publico;
 }
 

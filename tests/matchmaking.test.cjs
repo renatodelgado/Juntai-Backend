@@ -159,11 +159,15 @@ test('investidor pendente não consulta candidatas', async () => {
   await assert.rejects(new MatchmakingService(store.db).recommend(fixture.request.investidor.usuario.id, 24), e => e.statusCode === 403);
 });
 
-test('rotas: autenticação, RBAC, validação e identidade derivada do JWT', async () => {
+test('rotas: autenticação, RBAC, validação e identidade derivada do JWT', async t => {
+  const { AppDataSource } = require('../src/shared/database/data-source');
+  let currentRole;
+  t.mock.method(AppDataSource, 'query', async () => [{ tipo_perfil: currentRole, session_version: 0, ativo: true }]);
   const calls = [];
   const service = { recommend: async (user, limit) => { calls.push([user, limit]); return {}; }, confirmExposure: async () => ({}) };
   const router = matchmakingRoutes(service);
   async function invoke(url, role, body, method = 'GET') {
+    currentRole = role;
     const headers = role ? { authorization: 'Bearer ' + jwt.sign({ tipoPerfil: role }, process.env.JWT_SECRET, { subject: 'authenticated-user' }) } : {};
     const req = { method, url, headers, query: {}, body };
     return new Promise((resolve, reject) => {
