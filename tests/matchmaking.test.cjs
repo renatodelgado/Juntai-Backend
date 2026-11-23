@@ -176,6 +176,9 @@ test('investidor pendente não consulta candidatas', async () => {
 });
 
 test('rotas: autenticação, RBAC, validação e identidade derivada do JWT', async t => {
+  const { AppDataSource } = require('../src/shared/database/data-source');
+  let currentRole;
+  t.mock.method(AppDataSource, 'query', async () => [{ tipo_perfil: currentRole, session_version: 0, ativo: true }]);
   const { sancoesService } = require('../src/modules/moderacao/services/SancaoService');
   t.mock.method(sancoesService, 'verificarAcesso', async () => {});
   const usuarioId = fixture.request.investidor.usuario.id;
@@ -183,6 +186,7 @@ test('rotas: autenticação, RBAC, validação e identidade derivada do JWT', as
   const service = { recommend: async (user, limit) => { calls.push([user, limit]); return {}; }, confirmExposure: async () => ({}) };
   const router = matchmakingRoutes(service);
   async function invoke(url, role, body, method = 'GET') {
+    currentRole = role;
     const headers = role ? { authorization: 'Bearer ' + jwt.sign({ tipoPerfil: role }, process.env.JWT_SECRET, { subject: usuarioId }) } : {};
     const req = { method, url, headers, query: {}, body };
     return new Promise((resolve, reject) => {
