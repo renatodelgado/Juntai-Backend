@@ -81,7 +81,7 @@ test('falha em lote posterior descarta todo o ranking parcial e recalcula rules'
  strategy(t,'supervised');const s=store();t.mock.method(console,'warn',()=>{});for(let n=1;n<=10000;n++)s.candidates.push({...s.startup,id:`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`});
  let calls=0;const batches=[];
  const r=await new MatchmakingService(s.db,{supervised:async p=>{if(++calls===2)throw new AppError('unavailable',503);return supervisedResponse(p);},rules:async p=>{batches.push(p.startups.length);const f=clone(rulesFixture.response);f.recomendacoes[0].startupId=p.startups[0].id;return f;}}).recommend(s.investor.usuario.id,1);
- assert.deepEqual(batches,[10000,1]);assert.equal(r.origemRecomendacao,'rules');assert.equal(r.recomendacoes[0].probabilidadeInteresse,undefined);
+ assert.deepEqual(batches,[...Array(10).fill(1000),1]);assert.equal(r.origemRecomendacao,'rules');assert.equal(r.recomendacoes[0].probabilidadeInteresse,undefined);
 });
 test('estratégia desconhecida falha explicitamente',async(t)=>{strategy(t,'invalid');const s=store();await assert.rejects(new MatchmakingService(s.db).recommend(s.investor.usuario.id,24),e=>e.statusCode===500);});
 test('ranking global supervisionado combina lotes por probabilidade sem misturar versões',async(t)=>{

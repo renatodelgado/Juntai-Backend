@@ -72,18 +72,35 @@ export class MatchmakingService {
         origemRecomendacao: 'supervised', contextoExposicao: this.context(investor,byId.get(r.startupId)!,'supervised',index+1,identity!.versaoModelo) })) };
   }
   private async rankRules(investor: Investidor, startups: Startup[], limit: number) {
-    // /match/rules aceita até 10.000 candidatas. Top L de cada lote basta para o top L global.
+    // Fetch each eligible candidate before applying the behavioral adjustment.
     const recommendations: Profile[] = [];
     let version: string | null = null;
-    for (let offset = 0; offset < startups.length; offset += 10000) {
-      const batch = startups.slice(offset, offset + 10000);
-      const result = await this.client.rules({ investidor: rulesProfile(investor, true), startups: batch.map(s => rulesProfile(s, false)), limite: limit });
+    for (let offset = 0; offset < startups.length; offset += 1000) {
+      const batch = startups.slice(offset, offset + 1000);
+      const result = await this.client.rules({ investidor: rulesProfile(investor, true), startups: batch.map(s => rulesProfile(s, false)), limite: Math.min(1000, Math.max(limit, batch.length)) });
       if (version !== null && version !== result.versaoAlgoritmo) throw new AppError('Versão do recomendador inconsistente.', 502);
       version = result.versaoAlgoritmo;
       recommendations.push(...result.recomendacoes);
     }
-    recommendations.sort((a, b) => Number(a.scoreRanking === null) - Number(b.scoreRanking === null) || (b.scoreRanking ?? 0) - (a.scoreRanking ?? 0) || b.cobertura - a.cobertura || (a.startupId < b.startupId ? -1 : a.startupId > b.startupId ? 1 : 0));
     const byId = new Map(startups.map(s => [s.id, s]));
+    // A bounded affinity is based on distinct previously engaged startups, not raw click volume.
+    // It influences order only; the displayed compatibility remains the original rules score.
+    let affinities: Array<{ segmento: string; peso: string }> = [];
+    try {
+      affinities = await this.db.query(`SELECT s.segmento::text AS segmento, SUM(x.peso)::text AS peso FROM (
+        SELECT startup_id, MAX(peso) AS peso FROM (
+          SELECT startup_id, CASE tipo WHEN 'tempo_perfil' THEN 2 ELSE 1 END AS peso
+            FROM interacoes_descoberta WHERE investidor_id=$1 AND tipo IN ('perfil_aberto','tempo_perfil') AND ocorrido_em > now() - interval '90 days'
+          UNION ALL SELECT startup_id, 4 FROM startups_salvas WHERE investidor_id=$1
+          UNION ALL SELECT startup_id, 6 FROM funil_interacoes WHERE investidor_id=$1 AND tipo_evento='interesse_demonstrado' AND ocorrido_em > now() - interval '90 days'
+        ) sinais GROUP BY startup_id
+      ) x JOIN startups s ON s.id=x.startup_id GROUP BY s.segmento`, [investor.id]);
+    } catch (error: any) {
+      if (error?.code !== '42P01') throw error; // Permit deployment before the migration without breaking discovery.
+    }
+    const weights = new Map(affinities.map(row => [row.segmento, Math.min(0.12, Number(row.peso) * 0.01)]));
+    const rank = (r: Profile) => (r.scoreRanking ?? 0) + (weights.get(String(byId.get(r.startupId)?.segmento)) ?? 0);
+    recommendations.sort((a, b) => Number(a.scoreRanking === null) - Number(b.scoreRanking === null) || rank(b) - rank(a) || b.cobertura - a.cobertura || (a.startupId < b.startupId ? -1 : a.startupId > b.startupId ? 1 : 0));
     return { investidorId: investor.id, versaoAlgoritmo: version, origemRecomendacao: 'rules', recomendacoes: recommendations.slice(0, limit).map((r, index): Profile => ({ ...r, posicao: index + 1, posicaoRanking: index + 1, origemRecomendacao: 'rules', contextoExposicao: this.context(investor, byId.get(r.startupId)!, 'rules', index + 1, version) })) };
   }
   async highlights(userId: string) {
