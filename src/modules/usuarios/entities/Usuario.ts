@@ -18,9 +18,6 @@ export class Usuario {
   @Column({ type: 'varchar', length: 150, unique: true })
   email!: string;
 
-  @Column({ name: 'session_version', type: 'integer', default: 0 })
-  sessionVersion!: number;
-
   @Column({ name: 'senha_hash', type: 'varchar', length: 255 })
   senhaHash!: string;
 

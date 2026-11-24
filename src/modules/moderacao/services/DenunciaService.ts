@@ -99,7 +99,7 @@ export class DenunciaService {
     const [usuario] = await AppDataSource.query('SELECT ativo FROM usuarios WHERE id=$1', [usuarioId]);
     if (!usuario?.ativo) throw new AppError('Usuário não encontrado ou inativo.', 401);
     const items = await AppDataSource.query(
-      `SELECT ${selecaoPublica}, evidencia_snapshot AS "conteudoDenunciado" FROM denuncias WHERE denunciante_usuario_id=$1
+      `SELECT ${selecaoPublica} FROM denuncias WHERE denunciante_usuario_id=$1
        ORDER BY criada_em DESC, id DESC LIMIT $2 OFFSET $3`, [usuarioId, size + 1, (page - 1) * size]);
     return { items: items.slice(0, size), page, size, hasMore: items.length > size };
   }

@@ -60,12 +60,10 @@ export class SancaoService {
     if (typeof pagina !== 'string' || !/^[1-9]\d*$/.test(pagina) || Number(pagina) > 100000)
       throw new AppError('Paginação inválida.');
     const page = Number(pagina);
-    if (query.historico !== undefined && query.historico !== 'true') throw new AppError('Filtro de histórico inválido.');
-    const historico = query.historico === 'true';
     const size = 20;
     const items = await db.query(
-      `SELECT s.id, s.tipo, s.inicio_em AS "inicioEm", s.fim_em AS "fimEm"${historico ? ' , s.motivo, s.revogada_em AS "revogadaEm"' : ''} FROM sancoes s WHERE ${historico ? 's.usuario_id=$1' : vigente}
-       ORDER BY ${historico ? 's.inicio_em DESC, s.id DESC' : `${prioridade}, s.inicio_em DESC, s.id DESC`} LIMIT $2 OFFSET $3`,
+      `SELECT s.id, s.tipo, s.inicio_em AS "inicioEm", s.fim_em AS "fimEm" FROM sancoes s WHERE ${vigente}
+       ORDER BY ${prioridade}, s.inicio_em DESC, s.id DESC LIMIT $2 OFFSET $3`,
       [usuarioId, size + 1, (page - 1) * size],
     );
     return { items: items.slice(0, size), page, size, hasMore: items.length > size };

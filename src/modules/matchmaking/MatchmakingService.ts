@@ -8,7 +8,6 @@ import { EntityManager } from 'typeorm';
 import { createHash } from 'crypto';
 import { MatchmakingClient } from './MatchmakingClient';
 import { Context, issueContext, readContext } from './ExposureContext';
-import { BehaviorSnapshot, captureBehavior } from './BehaviorSnapshot';
 import { investorFeatures, startupFeatures, project, rulesProfile, Profile } from './contracts';
 import { SupervisedContractError, supervisedInvestorFeatures, supervisedStartupFeatures, supervisedProfile } from './supervisedContracts';
 import { buscaPerfilStartup, filtrarPerfis } from '@modules/moderacao/services/OcultacaoPerfil';
@@ -28,8 +27,8 @@ export class MatchmakingService {
     if (!investor || !investor.usuario.ativo || investor.usuario.tipoPerfil !== 'investidor' || investor.statusModeracao !== 'aprovado') throw new AppError('Somente investidores aprovados podem acessar recomendações.', 403);
     return investor;
   }
-  private context(i: Investidor, s: Startup, origin: Context['origin'], position: number | null, version: string | null, behavior?: BehaviorSnapshot) {
-    return issueContext({ investorId: i.id, startupId: s.id, investorRevision: profileRevision(i, true, origin === 'supervised'), startupRevision: profileRevision(s, false, origin === 'supervised'), origin, position, version, ...(behavior ? { behavior } : {}) });
+  private context(i: Investidor, s: Startup, origin: Context['origin'], position: number | null, version: string | null) {
+    return issueContext({ investorId: i.id, startupId: s.id, investorRevision: profileRevision(i, true, origin === 'supervised'), startupRevision: profileRevision(s, false, origin === 'supervised'), origin, position, version });
   }
   async recommend(userId: string, limit: number) {
     const investor = await this.actor(userId);
@@ -54,8 +53,6 @@ export class MatchmakingService {
   }
   private async rankSupervised(investor: Investidor, startups: Startup[], limit: number) {
     const candidates = startups.filter(s => s.statusModeracao === 'aprovado' && s.usuario?.ativo === true && s.usuario.id !== s.id && (!s.usuario.tipoPerfil || s.usuario.tipoPerfil === 'startup'));
-    const behavior = process.env.MATCHMAKING_BEHAVIOR_CAPTURE === 'true' && candidates.length
-      ? await captureBehavior(this.db.manager, investor.id, candidates.map(s => s.id)) : new Map<string, BehaviorSnapshot>();
     const recommendations: Profile[] = [];
     let identity: Profile | null = null;
     const notices = new Set<string>();
@@ -72,38 +69,21 @@ export class MatchmakingService {
     return { investidorId: investor.id, versaoAlgoritmo: identity?.versaoModelo ?? null, ...identity,
       origemRecomendacao: 'supervised', experimental: true, avisos: [...notices],
       recomendacoes: recommendations.slice(0,limit).map((r,index): Profile => ({ ...r, posicao: index+1, posicaoRanking: index+1,
-        origemRecomendacao: 'supervised', contextoExposicao: this.context(investor,byId.get(r.startupId)!,'supervised',index+1,identity!.versaoModelo,behavior.get(r.startupId)) })) };
+        origemRecomendacao: 'supervised', contextoExposicao: this.context(investor,byId.get(r.startupId)!,'supervised',index+1,identity!.versaoModelo) })) };
   }
   private async rankRules(investor: Investidor, startups: Startup[], limit: number) {
-    // Fetch each eligible candidate before applying the behavioral adjustment.
+    // /match/rules aceita até 10.000 candidatas. Top L de cada lote basta para o top L global.
     const recommendations: Profile[] = [];
     let version: string | null = null;
-    for (let offset = 0; offset < startups.length; offset += 1000) {
-      const batch = startups.slice(offset, offset + 1000);
-      const result = await this.client.rules({ investidor: rulesProfile(investor, true), startups: batch.map(s => rulesProfile(s, false)), limite: Math.min(1000, Math.max(limit, batch.length)) });
+    for (let offset = 0; offset < startups.length; offset += 10000) {
+      const batch = startups.slice(offset, offset + 10000);
+      const result = await this.client.rules({ investidor: rulesProfile(investor, true), startups: batch.map(s => rulesProfile(s, false)), limite: limit });
       if (version !== null && version !== result.versaoAlgoritmo) throw new AppError('Versão do recomendador inconsistente.', 502);
       version = result.versaoAlgoritmo;
       recommendations.push(...result.recomendacoes);
     }
+    recommendations.sort((a, b) => Number(a.scoreRanking === null) - Number(b.scoreRanking === null) || (b.scoreRanking ?? 0) - (a.scoreRanking ?? 0) || b.cobertura - a.cobertura || (a.startupId < b.startupId ? -1 : a.startupId > b.startupId ? 1 : 0));
     const byId = new Map(startups.map(s => [s.id, s]));
-    // A bounded affinity is based on distinct previously engaged startups, not raw click volume.
-    // It influences order only; the displayed compatibility remains the original rules score.
-    let affinities: Array<{ segmento: string; peso: string }> = [];
-    try {
-      affinities = await this.db.query(`SELECT s.segmento::text AS segmento, SUM(x.peso)::text AS peso FROM (
-        SELECT startup_id, MAX(peso) AS peso FROM (
-          SELECT startup_id, CASE tipo WHEN 'tempo_perfil' THEN 2 ELSE 1 END AS peso
-            FROM interacoes_descoberta WHERE investidor_id=$1 AND tipo IN ('perfil_aberto','tempo_perfil') AND ocorrido_em > now() - interval '90 days'
-          UNION ALL SELECT startup_id, 4 FROM startups_salvas WHERE investidor_id=$1
-          UNION ALL SELECT startup_id, 6 FROM funil_interacoes WHERE investidor_id=$1 AND tipo_evento='interesse_demonstrado' AND ocorrido_em > now() - interval '90 days'
-        ) sinais GROUP BY startup_id
-      ) x JOIN startups s ON s.id=x.startup_id GROUP BY s.segmento`, [investor.id]);
-    } catch (error: any) {
-      if (error?.code !== '42P01') throw error; // Permit deployment before the migration without breaking discovery.
-    }
-    const weights = new Map(affinities.map(row => [row.segmento, Math.min(0.12, Number(row.peso) * 0.01)]));
-    const rank = (r: Profile) => (r.scoreRanking ?? 0) + (weights.get(String(byId.get(r.startupId)?.segmento)) ?? 0);
-    recommendations.sort((a, b) => Number(a.scoreRanking === null) - Number(b.scoreRanking === null) || rank(b) - rank(a) || b.cobertura - a.cobertura || (a.startupId < b.startupId ? -1 : a.startupId > b.startupId ? 1 : 0));
     return { investidorId: investor.id, versaoAlgoritmo: version, origemRecomendacao: 'rules', recomendacoes: recommendations.slice(0, limit).map((r, index): Profile => ({ ...r, posicao: index + 1, posicaoRanking: index + 1, origemRecomendacao: 'rules', contextoExposicao: this.context(investor, byId.get(r.startupId)!, 'rules', index + 1, version) })) };
   }
   async highlights(userId: string) {
@@ -189,9 +169,7 @@ export class MatchmakingService {
       if (supervised && startup.usuario.tipoPerfil !== 'startup') throw new AppError('Startup indisponível.', 404);
       if (profileRevision(investor, true, supervised) !== context.investorRevision || profileRevision(startup, false, supervised) !== context.startupRevision) throw new AppError('Perfis alterados. Atualize a descoberta.', 409);
       const snapshot = { investidor: project(investor, supervised ? supervisedInvestorFeatures : investorFeatures), startup: project(startup, supervised ? supervisedStartupFeatures : startupFeatures) };
-      const [saved] = context.behavior ? await manager.query(`INSERT INTO exposicoes_startups (id,investidor_id,startup_id,origem_recomendacao,posicao_ranking,versao_recomendador,snapshot_perfis,snapshot_comportamental)
-        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id,ocorrido_em`,
-        [context.exposureId, investor.id, startup.id, context.origin, context.position, context.version, JSON.stringify(snapshot), JSON.stringify(context.behavior)]) : await manager.query(`INSERT INTO exposicoes_startups (id,investidor_id,startup_id,origem_recomendacao,posicao_ranking,versao_recomendador,snapshot_perfis)
+      const [saved] = await manager.query(`INSERT INTO exposicoes_startups (id,investidor_id,startup_id,origem_recomendacao,posicao_ranking,versao_recomendador,snapshot_perfis)
         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id,ocorrido_em`,
         [context.exposureId, investor.id, startup.id, context.origin, context.position, context.version, JSON.stringify(snapshot)]);
       if (saved) return saved;

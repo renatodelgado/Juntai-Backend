@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import { AuthService } from '@modules/auth/services/AuthService';
 import { AppError } from '@shared/errors/AppError';
 
-import { requestPasswordRecovery, resetPassword } from '@modules/auth/services/PasswordRecoveryService';
-
 export class AuthController {
   private authService: AuthService;
 
@@ -22,17 +20,7 @@ export class AuthController {
 
   forgotPassword = async (req: Request, res: Response): Promise<Response> => {
     try {
-      await requestPasswordRecovery(req.body?.email);
-      return res.status(200).json({ message: 'Se o e-mail estiver cadastrado, você receberá instruções.' });
-    } catch (error: unknown) {
-      return this.handleError(res, error);
-    }
-  };
-
-  resetPassword = async (req: Request, res: Response): Promise<Response> => {
-    try {
-      await resetPassword(req.body?.token, req.body?.senha);
-      return res.status(200).json({ message: 'Senha alterada.' });
+      return res.status(200).json(await this.authService.checkRecoveryEmail(req.body?.email));
     } catch (error: unknown) {
       return this.handleError(res, error);
     }

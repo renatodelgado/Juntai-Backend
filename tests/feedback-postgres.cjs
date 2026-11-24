@@ -47,11 +47,6 @@ async function main(){
  state=await service.consultar(b,'conversa',c);
  assert.equal(state.investimentoInformadoPeloOutro,true);assert.equal(state.investimentoConfirmado,false);
  assert.equal(state.avaliacao.nota,2);assert.equal(state.avaliacao.comentario,null);
- assert.equal(state.avaliacaoRecebida.comentario,'Privado');
- assert.deepEqual(Object.keys(state.avaliacaoRecebida).sort(),['id','nota','comentario','atualizadoEm'].sort());
- await query('UPDATE avaliacoes SET comentario_ocultado_por_moderacao=true WHERE avaliador_usuario_id=$1',[a]);
- assert.equal((await service.consultar(b,'conversa',c)).avaliacaoRecebida.comentario,null);
- await query('UPDATE avaliacoes SET comentario_ocultado_por_moderacao=false WHERE avaliador_usuario_id=$1',[a]);
  state=await service.salvar(b,'conversa',c,{nota:2,perspectivaInvestimento:'realizado'});
  assert.equal(state.investimentoConfirmado,true);
  assert.equal((await service.consultar(a,'conversa',c)).investimentoConfirmado,true);

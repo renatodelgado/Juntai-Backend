@@ -35,7 +35,7 @@ test('resolução de avaliação usa o autor e o vínculo, mantendo comentário 
   const usuario = randomUUID();
   const manager = {
     async query(sql, params) {
-      assert.match(sql, /a\.avaliado_usuario_id=\$2 AND a\.avaliador_usuario_id<>\$2 AND \$2 IN \(s\.usuario_id,i\.usuario_id\)/);
+      assert.match(sql, /a\.avaliador_usuario_id=\$2 AND \$2 IN \(s\.usuario_id,i\.usuario_id\)/);
       assert.match(sql, /CASE WHEN NOT a\.comentario_ocultado_por_moderacao THEN a\.comentario END/);
       return params[1] === usuario ? [{ denunciadoId: usuario, snapshot: { nota: 4, comentario: null } }] : [];
     },
@@ -86,12 +86,10 @@ test('rotas de denúncia aplicam autenticação, acesso, cota e projeção priva
     });
   });
   t.mock.method(db, 'query', async (sql, params) => {
-    if (sql.includes('session_version')) return [{ tipo_perfil: 'startup', session_version: 0, ativo: true }];
     if (sql.includes('FROM sancoes')) return [];
     if (sql.includes('SELECT ativo')) return [{ ativo: true }];
     assert.match(sql, /WHERE denunciante_usuario_id=\$1/);
-    assert.match(sql, /evidencia_snapshot AS/);
-    assert.doesNotMatch(sql, /denunciado_usuario|descricao|admin/);
+    assert.doesNotMatch(sql, /evidencia|denunciado|descricao|admin/);
     assert.deepEqual(params.slice(1), [2, 0]);
     return params[0] === autor ? [{
       id: criadas[0].id, tipoAlvo: 'mensagem', alvoId: mensagem.alvoId, campoAlvo: null,

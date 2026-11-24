@@ -56,7 +56,7 @@ export class AvaliacaoService {
     const ctx = await this.contexto(usuarioId, tipo, id);
     const coluna = tipo === 'conversa' ? 'conversa_id' : 'reuniao_id';
     const outroUsuarioId = ctx.startup === usuarioId ? ctx.investidor : ctx.startup;
-    // A avalia??o recebida fica vis?vel somente ao participante avaliado.
+    // One snapshot: expose only the other participant's investment declaration, never their private review.
     const [state] = await db.query(`SELECT
       (SELECT row_to_json(minha) FROM (
         SELECT id::text, nota, CASE WHEN NOT comentario_ocultado_por_moderacao THEN comentario END AS comentario,
@@ -64,15 +64,10 @@ export class AvaliacaoService {
           perspectiva_investimento AS "perspectivaInvestimento", criado_em AS "criadoEm", atualizado_em AS "atualizadoEm"
         FROM avaliacoes WHERE ${coluna}=$1 AND avaliador_usuario_id=$2
       ) minha) AS avaliacao,
-      (SELECT row_to_json(recebida) FROM (
-        SELECT id::text, nota, CASE WHEN NOT comentario_ocultado_por_moderacao THEN comentario END AS comentario,
-          atualizado_em AS "atualizadoEm"
-        FROM avaliacoes WHERE ${coluna}=$1 AND avaliador_usuario_id=$3 AND avaliado_usuario_id=$2
-      ) recebida) AS "avaliacaoRecebida",
       EXISTS(SELECT 1 FROM avaliacoes WHERE ${coluna}=$1 AND avaliador_usuario_id=$3
         AND avaliado_usuario_id=$2 AND perspectiva_investimento='realizado') AS "investimentoInformadoPeloOutro"`, [id, usuarioId, outroUsuarioId]);
     return {
-      elegivel: ctx.elegivel, nome: ctx.nome, avaliacao: state.avaliacao, avaliacaoRecebida: state.avaliacaoRecebida ?? null,
+      elegivel: ctx.elegivel, nome: ctx.nome, avaliacao: state.avaliacao,
       investimentoInformadoPeloOutro: state.investimentoInformadoPeloOutro,
       investimentoConfirmado: state.avaliacao?.perspectivaInvestimento === 'realizado' && state.investimentoInformadoPeloOutro,
     };

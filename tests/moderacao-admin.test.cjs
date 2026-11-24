@@ -40,7 +40,6 @@ async function ouvir(t, aplicacao = app) {
 
 test('administração de denúncias exige JWT e nega todas as operações a usuários comuns', async t => {
   t.mock.method(sancoesService, 'verificarAcesso', async () => {});
-  t.mock.method(db, 'query', async () => [{ tipo_perfil: 'startup', session_version: 0, ativo: true }]);
   const http = await ouvir(t);
   const id = randomUUID();
   assert.equal((await http('')).status, 401);

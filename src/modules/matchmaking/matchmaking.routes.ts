@@ -5,20 +5,10 @@ import { TipoPerfil } from '@shared/enums';
 import { handleControllerError } from '@shared/http/handleControllerError';
 import { AppError } from '@shared/errors/AppError';
 import { integer, MatchmakingService } from './MatchmakingService';
-import { DiscoveryInteractions } from './DiscoveryInteractions';
 
 export function matchmakingRoutes(service = new MatchmakingService()) {
   const router = Router();
   const auth = [ensureAuthenticated, ensureRole(TipoPerfil.INVESTIDOR)];
-  const interactions = new DiscoveryInteractions(undefined, service);
-  router.get('/salvas', ...auth, async (req, res) => {
-    try { res.set('Cache-Control', 'no-store').json(await interactions.saved(req.user!.id)); }
-    catch (error) { handleControllerError(res, error); }
-  });
-  router.post('/:id/interacoes', ...auth, async (req, res) => {
-    try { res.json(await interactions.record(req.user!.id, req.params.id, req.body)); }
-    catch (error) { handleControllerError(res, error); }
-  });
   router.get('/destaques', ...auth, async (req, res) => {
     try {
       res.set('Cache-Control', 'no-store').json(await service.highlights(req.user!.id));

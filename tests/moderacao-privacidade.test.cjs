@@ -42,7 +42,6 @@ test('logger protege justificativas, snapshots e erros do SQL de moderação', (
 
 test('falha inesperada em decisão administrativa não registra parâmetros privados nem os envia ao cliente', async t => {
   t.mock.method(sancoesService, 'verificarAcesso', async () => {});
-  t.mock.method(AppDataSource, 'query', async () => [{ tipo_perfil: 'admin', session_version: 0, ativo: true }]);
   t.mock.method(AppDataSource, 'getRepository', () => ({
     findOneBy: async () => ({ ativo: true, tipoPerfil: 'admin' }),
   }));

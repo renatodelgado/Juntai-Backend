@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { ensureAuthenticated, ensureValidToken } from '@shared/middlewares/ensureAuthenticated';
+import { ensureAuthenticated } from '@shared/middlewares/ensureAuthenticated';
 import { handleControllerError } from '@shared/http/handleControllerError';
 import { DenunciaService } from '../services/DenunciaService';
 
@@ -33,7 +33,7 @@ denunciaRoutes.post('/denuncias', ensureAuthenticated, async (req, res) => {
   }
 });
 
-denunciaRoutes.get('/minhas-denuncias', ensureValidToken, async (req, res) => {
+denunciaRoutes.get('/minhas-denuncias', ensureAuthenticated, async (req, res) => {
   try {
     res.set('Cache-Control', 'no-store');
     return res.json(await service.listarMinhas(req.user!.id, req.query));

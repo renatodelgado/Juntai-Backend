@@ -90,7 +90,7 @@ export class AlvoDenunciaService {
          LEFT JOIN reunioes r ON r.id=a.reuniao_id
          JOIN startups s ON s.id=COALESCE(c.startup_id,r.startup_id)
          JOIN investidores i ON i.id=COALESCE(c.investidor_id,r.investidor_id)
-         WHERE a.id=$1 AND a.avaliado_usuario_id=$2 AND a.avaliador_usuario_id<>$2 AND $2 IN (s.usuario_id,i.usuario_id) AND NOT a.comentario_ocultado_por_moderacao`, parametros);
+         WHERE a.id=$1 AND a.avaliador_usuario_id=$2 AND $2 IN (s.usuario_id,i.usuario_id)`, parametros);
       if (!row) throw new AppError('Alvo não encontrado ou acesso não permitido.', 404);
       return row;
     }

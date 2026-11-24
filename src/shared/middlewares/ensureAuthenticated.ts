@@ -1,7 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { authConfig } from '@shared/config/auth';
-import { AppDataSource } from '@shared/database/data-source';
 import { TipoPerfil } from '@shared/enums';
 import { isUuid } from '@shared/validation/isUuid';
 import { handleControllerError } from '@shared/http/handleControllerError';
@@ -10,50 +9,40 @@ import { sancoesService } from '@modules/moderacao/services/SancaoService';
 interface TokenPayload {
   sub: string;
   tipoPerfil: TipoPerfil;
-  sessionVersion?: number;
 }
 
-export async function ensureValidToken(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const [scheme, token] = (req.headers.authorization ?? '').split(' ');
+export function ensureValidToken(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    res.status(401).json({ message: 'Token não informado.' });
+    return;
+  }
+
+  const [scheme, token] = authHeader.split(' ');
+
   if (scheme !== 'Bearer' || !token) {
-    res.status(401).json({ message: 'Token n?o informado ou inv?lido.' });
+    res.status(401).json({ message: 'Formato do token inválido. Use: Bearer <token>.' });
     return;
   }
-  let payload: TokenPayload;
-  try {
-    payload = jwt.verify(token, authConfig.secret) as unknown as TokenPayload;
-    if (typeof payload.sub !== 'string' || !isUuid(payload.sub) || !Object.values(TipoPerfil).includes(payload.tipoPerfil) ||
-      (payload.sessionVersion !== undefined && (!Number.isSafeInteger(payload.sessionVersion) || payload.sessionVersion < 0)))
-      throw new Error('Invalid token payload');
-  } catch {
-    res.status(401).json({ message: 'Token inv?lido ou expirado.' });
-    return;
-  }
-  try {
-    const rows: { tipo_perfil: TipoPerfil; session_version: number; ativo: boolean }[] = await AppDataSource.query(
-      'SELECT tipo_perfil, session_version, ativo FROM usuarios WHERE id::text = $1', [payload.sub],
-    );
-    const account = rows[0];
-    if (!account?.ativo || account.tipo_perfil !== payload.tipoPerfil || account.session_version !== (payload.sessionVersion ?? 0)) {
-      res.status(401).json({ message: 'Sess?o inv?lida ou expirada.' });
-      return;
-    }
-    req.user = { id: payload.sub, tipoPerfil: account.tipo_perfil };
-    next();
-  } catch {
-    res.status(503).json({ message: 'N?o foi poss?vel validar a sess?o. Tente novamente.' });
-  }
-}
 
-export async function ensureAuthenticated(req: Request, res: Response, next: NextFunction): Promise<void> {
-  let valid = false;
-  await ensureValidToken(req, res, () => { valid = true; });
-  if (!valid) return;
   try {
-    await sancoesService.verificarAcesso(req.user!.id);
-  } catch (error) {
-    handleControllerError(res, error);
+    const { sub, tipoPerfil } = jwt.verify(token, authConfig.secret) as unknown as TokenPayload;
+    if (typeof sub !== 'string' || !isUuid(sub) || !Object.values(TipoPerfil).includes(tipoPerfil))
+      throw new Error('Identidade inválida.');
+    req.user = { id: sub, tipoPerfil };
+  } catch {
+    res.status(401).json({ message: 'Token inválido ou expirado.' });
     return;
   }
   next();
+}
+
+export function ensureAuthenticated(req: Request, res: Response, next: NextFunction): void {
+  ensureValidToken(req, res, () => {
+    void sancoesService.verificarAcesso(req.user!.id).then(
+      () => next(),
+      error => handleControllerError(res, error),
+    );
+  });
 }
